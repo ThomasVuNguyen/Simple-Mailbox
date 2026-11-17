@@ -50,10 +50,14 @@ export interface Outgoing {
   to: string;
   subject: string;
   text: string;
+  /** Message-ID of the email being answered. */
   inReplyTo?: string | null;
+  /** Earlier Message-IDs in the conversation, oldest first. */
+  references?: string[];
 }
 
 export async function sendEmail(resend: ResendTarget, mail: Outgoing): Promise<{ id: string }> {
+  const refs = [...(mail.references ?? []), ...(mail.inReplyTo ? [mail.inReplyTo] : [])];
   return call<{ id: string }>(resend, '/emails', {
     method: 'POST',
     body: JSON.stringify({
@@ -61,9 +65,15 @@ export async function sendEmail(resend: ResendTarget, mail: Outgoing): Promise<{
       to: [mail.to],
       subject: mail.subject,
       text: mail.text,
-      headers: mail.inReplyTo ? { 'In-Reply-To': mail.inReplyTo, References: mail.inReplyTo } : undefined,
+      headers: mail.inReplyTo ? { 'In-Reply-To': mail.inReplyTo, References: [...new Set(refs)].join(' ') } : undefined,
     }),
   });
+}
+
+/** The Message-ID Resend gave a sent email. Null until Resend has assigned it. */
+export async function sentMessageId(resend: ResendTarget, id: string): Promise<string | null> {
+  const email = await call<{ message_id?: string | null }>(resend, `/emails/${encodeURIComponent(id)}`);
+  return email.message_id || null;
 }
 
 // ---------- receiving (Resend Inbound) ----------

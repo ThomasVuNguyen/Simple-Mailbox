@@ -223,9 +223,13 @@ POST /mailboxes                        {"domain": "<domain>"} makes a random add
 GET  /mailboxes/<address>/wait?timeout=60
                                        waits for the next email, returns it
                                        with "code" and "link" already found
-GET  /mailboxes/<address>/messages     newest first
+GET  /mailboxes/<address>/messages     newest first, each with a threadId
 GET  /messages/<id>                    the full email
+GET  /mailboxes/<address>/threads      conversations, newest first
+GET  /threads/<id>                     a whole conversation, oldest first
 POST /mailboxes/<address>/send         {"to", "subject", "text"}
+                                       add "replyTo": <message id> to reply
+                                       in that conversation
 DELETE /mailboxes/<address>            when you are done with it
 
 To sign up somewhere: make a mailbox, note the time in ms,

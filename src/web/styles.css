@@ -104,6 +104,15 @@ select.field { cursor: pointer; }
 .view-toggle { margin-bottom: 16px; }
 
 .compose .stack > * + * { margin-top: 20px; }
+
+/* A conversation: each email is a small header line and its text, separated by space alone. */
+.thread-meta { margin-bottom: 12px; }
+.entry { margin-bottom: 40px; }
+.entry-head { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 8px; }
+.quoted { margin-top: 16px; }
+.read .entry-tools { margin-top: 10px; }
+.reply { margin-top: 8px; }
+.reply .row-actions { margin-top: 24px; }
 .compose .row-actions { margin-top: 32px; }
 
 /* Settings and the API key prompt take the two right columns. */

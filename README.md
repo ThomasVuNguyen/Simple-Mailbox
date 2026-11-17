@@ -12,6 +12,7 @@ bmail: throwaway mailboxes on your own domains, built so an AI agent can use the
 - **More PINs:** make one PIN per agent or device in Settings, each with a name. Each email shows which PIN read it first ("Read by Claude at 10:43"). Removing a PIN signs out everything that used it.
 - **Mailboxes:** add and delete mailboxes on any of your domains, with a chosen name or a random one. Each mailbox keeps the email it sends and receives. `name+anything@domain` arrives in `name@domain`.
 - **Codes:** bmail finds the verification code or link in each email and shows it first.
+- **Conversations:** emails are grouped the way mail apps do it: by `In-Reply-To` / `References` first (bmail reads back the Message-ID Resend gives each sent email), then, for replies only, by subject and the other person. Repeated notifications with the same subject stay separate. Quoted earlier text in a reply is folded away.
 - **Stack:** Cloudflare only for hosting and storage (Workers, D1). Resend sends and receives the mail.
 - **Domain:** `bmail.beenex.company`.
 
@@ -79,7 +80,9 @@ Every request takes `Authorization: Bearer <PIN>`. A session token from `POST /a
 | `GET /api/mailboxes/<address>/wait?timeout=60&after=<ms>` | Waits up to 90 s for the next email and returns it with `code` and `link` already found. |
 | `GET /api/mailboxes/<address>/messages?after=<ms>` | Emails, newest first. |
 | `GET /api/messages/<id>` | The full email. The first open marks it read. |
-| `POST /api/mailboxes/<address>/send` `{"to", "subject", "text", "replyTo"?}` | Sends plain text. `replyTo` is a message id. |
+| `GET /api/mailboxes/<address>/threads` | Conversations, newest activity first, with the latest code or link. |
+| `GET /api/threads/<id>` | A whole conversation, oldest first. Opening it marks it read. |
+| `POST /api/mailboxes/<address>/send` `{"to", "subject", "text", "replyTo"?}` | Sends plain text. `replyTo` is a message id; the reply goes into that conversation with proper `In-Reply-To` and `References`. |
 | `DELETE /api/mailboxes/<address>` | Deletes the mailbox and its email. |
 
 ## Design

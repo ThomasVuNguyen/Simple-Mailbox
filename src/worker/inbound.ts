@@ -1,7 +1,8 @@
 import PostalMime from 'postal-mime';
 import { extractCode, extractLink, htmlToText } from '../shared/extract';
 import type { Env } from './env';
-import { getReceivedEmail, listReceivedEmails, type ReceivedSummary, type ResendTarget } from './resend';
+import { getReceivedEmail, getResendKey, listReceivedEmails, type ReceivedSummary, type ResendTarget } from './resend';
+import { findThread, parseIds, subjectKey } from './threads';
 
 const MAX_HTML = 500_000;
 const MAX_TEXT = 200_000;
@@ -27,23 +28,36 @@ interface Parsed {
   text: string | null;
   html: string | null;
   messageId: string | null;
+  inReplyTo: string | null;
+  refs: string[];
   createdAt: number;
   resendId?: string;
 }
 
-/** Stores one received email in one mailbox. Returns false if it was already stored (same Resend id). */
-async function store(env: Env, mailbox: Mailbox, p: Parsed): Promise<boolean> {
+/** Stores one received email in one mailbox, in its conversation. Returns false if it was already stored (same Resend id). */
+async function store(env: Env, mailbox: Mailbox, p: Parsed, resend?: ResendTarget | null): Promise<boolean> {
   const html = p.html ? p.html.slice(0, MAX_HTML) : null;
   const text = (p.text?.trim() ? p.text : html ? htmlToText(html) : '').slice(0, MAX_TEXT);
   const subject = p.subject.trim();
+  const id = crypto.randomUUID();
+  const thread = await findThread(env, { mailboxId: mailbox.id, subject, counterpart: p.fromAddress, inReplyTo: p.inReplyTo, refs: p.refs }, resend);
   const res = await env.DB.prepare(
-    `INSERT OR IGNORE INTO messages (id, mailbox_id, direction, from_name, from_address, to_address, subject, text, html, code, link, message_id, created_at, resend_id)
-     VALUES (?, ?, 'in', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR IGNORE INTO messages (id, mailbox_id, direction, from_name, from_address, to_address, subject, text, html, code, link,
+       message_id, created_at, resend_id, thread_id, in_reply_to, refs, subject_key, counterpart)
+     VALUES (?, ?, 'in', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
-    crypto.randomUUID(), mailbox.id, p.fromName, p.fromAddress, mailbox.address, subject, text, html,
+    id, mailbox.id, p.fromName, p.fromAddress, mailbox.address, subject, text, html,
     extractCode(subject, text), extractLink(subject, text, html), p.messageId, p.createdAt, p.resendId ?? null,
+    thread ?? id, p.inReplyTo, p.refs.length ? p.refs.join(' ') : null, subjectKey(subject), p.fromAddress,
   ).run();
   return res.meta.changes > 0;
+}
+
+/** Header lookup that ignores case: Resend may send "In-Reply-To" or "in-reply-to". */
+function header(headers: Record<string, string> | null | undefined, name: string): string | null {
+  if (!headers) return null;
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === name);
+  return key ? headers[key] : null;
 }
 
 async function mailboxesFor(env: Env, recipients: string[]): Promise<Mailbox[]> {
@@ -69,6 +83,7 @@ export async function receiveEmail(env: Env, mail: Incoming): Promise<boolean> {
   if (!mailbox) return false;
   const raw = mail.raw instanceof ArrayBuffer ? mail.raw : await new Response(mail.raw).arrayBuffer();
   const email = await PostalMime.parse(raw);
+  const key = await getResendKey(env).catch(() => null);
   await store(env, mailbox, {
     fromName: email.from?.name || null,
     fromAddress: (email.from?.address ?? 'unknown').toLowerCase(),
@@ -76,8 +91,10 @@ export async function receiveEmail(env: Env, mail: Incoming): Promise<boolean> {
     text: email.text ?? null,
     html: email.html ?? null,
     messageId: email.messageId ?? null,
+    inReplyTo: parseIds(email.inReplyTo)[0] ?? null,
+    refs: parseIds(email.references),
     createdAt: Date.now(),
-  });
+  }, key ? { key, base: env.RESEND_API_BASE } : null);
   return true;
 }
 
@@ -96,7 +113,7 @@ export async function receiveFromResend(env: Env, resend: ResendTarget, summary:
   if (already && already.n >= boxes.length) return 0;
 
   const email = await getReceivedEmail(resend, summary.id);
-  const from = parseAddress(email.headers?.from ?? email.headers?.From ?? email.from);
+  const from = parseAddress(header(email.headers, 'from') ?? email.from);
   const parsed: Parsed = {
     fromName: from.name,
     fromAddress: from.address,
@@ -104,11 +121,13 @@ export async function receiveFromResend(env: Env, resend: ResendTarget, summary:
     text: email.text,
     html: email.html,
     messageId: email.message_id,
+    inReplyTo: parseIds(header(email.headers, 'in-reply-to'))[0] ?? null,
+    refs: parseIds(header(email.headers, 'references')),
     createdAt: Date.parse(email.created_at) || Date.now(),
     resendId: email.id,
   };
   let stored = 0;
-  for (const box of boxes) if (await store(env, box, parsed)) stored++;
+  for (const box of boxes) if (await store(env, box, parsed, resend)) stored++;
   return stored;
 }
 

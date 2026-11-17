@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatCode } from '../shared/extract';
-import type { AppState, Domain, Mailbox, MessageSummary } from '../shared/types';
+import type { AppState, Domain, Mailbox, ThreadSummary } from '../shared/types';
 import { api, copy, errorText } from './api';
 import { shortTime } from './format';
-import { Compose, Reader, type Draft } from './Reader';
+import { Compose, ThreadReader, type Draft } from './Reader';
 import { ResendPrompt, Settings } from './Settings';
 
 const POLL_MS = 10_000;
@@ -15,9 +15,11 @@ export function Mailroom({ state, onStateChange }: { state: AppState; onStateCha
   const [mailboxes, setMailboxes] = useState<Mailbox[] | null>(null);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [address, setAddress] = useState<string | null>(selectedFromHash);
-  const [messages, setMessages] = useState<MessageSummary[] | null>(null);
+  const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  // Bumped when the open conversation should reload, for example after new mail arrives in it.
+  const [revision, setRevision] = useState(0);
 
   const mailbox = mailboxes?.find((m) => m.address === address) ?? null;
 
@@ -27,10 +29,20 @@ export function Mailroom({ state, onStateChange }: { state: AppState; onStateCha
     setAddress((a) => (a && list.some((m) => m.address === a) ? a : list[0]?.address ?? null));
   }, []);
 
-  const loadMessages = useCallback(async (addr: string) => {
-    const list = await api<MessageSummary[]>(`/mailboxes/${encodeURIComponent(addr)}/messages`);
-    setMessages((prev) => (addr === selectedFromHash() || prev === null ? list : prev));
+  const loadThreads = useCallback(async (addr: string) => {
+    const list = await api<ThreadSummary[]>(`/mailboxes/${encodeURIComponent(addr)}/threads`);
+    if (addr !== selectedFromHash()) return;
+    setThreads((prev) => {
+      // New mail in the open conversation: reload it.
+      const before = prev?.find((t) => t.id === openRef.current);
+      const after = list.find((t) => t.id === openRef.current);
+      if (before && after && after.count !== before.count) setRevision((r) => r + 1);
+      return list;
+    });
   }, []);
+
+  const openRef = useRef<string | null>(null);
+  openRef.current = openId;
 
   useEffect(() => {
     loadMailboxes().catch(() => {});
@@ -46,38 +58,45 @@ export function Mailroom({ state, onStateChange }: { state: AppState; onStateCha
       .then((r) => {
         if (!r.connected) return;
         loadMailboxes().catch(() => {});
-        if (address) loadMessages(address).catch(() => {});
+        if (address) loadThreads(address).catch(() => {});
         onStateChange();
       })
       .catch(() => {});
-  }, [state.hasResendKey, state.receiving, loadMailboxes, loadMessages, address, onStateChange]);
+  }, [state.hasResendKey, state.receiving, loadMailboxes, loadThreads, address, onStateChange]);
 
   // The open mailbox lives in the URL hash, so a reload or a shared link opens it again.
   useEffect(() => {
     if (address && location.hash.slice(1) !== encodeURIComponent(address)) history.replaceState(null, '', `#${encodeURIComponent(address)}`);
-    setMessages(null);
+    setThreads(null);
     setOpenId(null);
     setDraft(null);
-    if (address) loadMessages(address).catch(() => {});
-  }, [address, loadMessages]);
+    if (address) loadThreads(address).catch(() => {});
+  }, [address, loadThreads]);
 
   useEffect(() => {
     const t = setInterval(() => {
       if (document.hidden) return;
       loadMailboxes().catch(() => {});
-      if (address) loadMessages(address).catch(() => {});
+      if (address) loadThreads(address).catch(() => {});
     }, POLL_MS);
     return () => clearInterval(t);
-  }, [address, loadMailboxes, loadMessages]);
+  }, [address, loadMailboxes, loadThreads]);
 
-  // Open the newest email when a mailbox is opened on a wide screen.
+  // Open the newest conversation when a mailbox is opened on a wide screen.
   useEffect(() => {
-    if (messages && messages.length && !openId && !draft && matchMedia('(min-width: 961px)').matches) setOpenId(messages[0].id);
-  }, [messages, openId, draft]);
+    if (threads && threads.length && !openId && !draft && matchMedia('(min-width: 961px)').matches) setOpenId(threads[0].id);
+  }, [threads, openId, draft]);
 
   function opened(id: string) {
-    setMessages((list) => list?.map((m) => (m.id === id && !m.readAt ? { ...m, readAt: Date.now() } : m)) ?? list);
+    setThreads((list) => list?.map((t) => (t.id === id ? { ...t, unread: 0 } : t)) ?? list);
     loadMailboxes().catch(() => {});
+  }
+
+  async function refreshAfterSend(threadId: string) {
+    if (!mailbox) return;
+    await loadThreads(mailbox.address).catch(() => {});
+    setOpenId(threadId);
+    setRevision((r) => r + 1);
   }
 
   async function lock() {
@@ -111,10 +130,10 @@ export function Mailroom({ state, onStateChange }: { state: AppState; onStateCha
         <ResendPrompt onSaved={onStateChange} />
       ) : (
         <>
-          <MessageList
+          <ThreadList
             mailbox={mailbox}
             hasMailboxes={!!mailboxes?.length}
-            messages={messages}
+            threads={threads}
             openId={draft ? null : openId}
             onOpen={(id) => { setDraft(null); setOpenId(id); }}
             onWrite={() => mailbox && setDraft({ from: mailbox.address, to: '', subject: '', text: '' })}
@@ -124,21 +143,17 @@ export function Mailroom({ state, onStateChange }: { state: AppState; onStateCha
             <Compose
               draft={draft}
               onClose={() => setDraft(null)}
-              onSent={async () => { setDraft(null); await loadMessages(mailbox.address); }}
+              onSent={(threadId) => { setDraft(null); refreshAfterSend(threadId); }}
             />
-          ) : openId ? (
-            <Reader
+          ) : openId && mailbox ? (
+            <ThreadReader
               key={openId}
               id={openId}
+              mailboxAddress={mailbox.address}
+              revision={revision}
               onOpened={opened}
-              onReply={(m) => setDraft({
-                from: m.direction === 'in' ? m.toAddress : m.fromAddress,
-                to: m.direction === 'in' ? m.fromAddress : m.toAddress,
-                subject: /^re:/i.test(m.subject) ? m.subject : `Re: ${m.subject}`,
-                text: '',
-                replyTo: m.id,
-              })}
-              onDeleted={async () => { setOpenId(null); if (mailbox) await loadMessages(mailbox.address); loadMailboxes(); }}
+              onSent={refreshAfterSend}
+              onDeleted={async () => { setOpenId(null); await loadThreads(mailbox.address); loadMailboxes(); }}
             />
           ) : (
             <section className="read" />
@@ -247,17 +262,17 @@ function NewMailbox({ domains, onCancel, onCreated }: { domains: Domain[]; onCan
   );
 }
 
-function MessageList(props: {
+function ThreadList(props: {
   mailbox: Mailbox | null;
   hasMailboxes: boolean;
-  messages: MessageSummary[] | null;
+  threads: ThreadSummary[] | null;
   openId: string | null;
   onOpen: (id: string) => void;
   onWrite: () => void;
   onDeleted: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const { mailbox, messages } = props;
+  const { mailbox, threads } = props;
 
   if (!mailbox) {
     return (
@@ -271,17 +286,23 @@ function MessageList(props: {
   }
 
   async function remove() {
-    if (!mailbox || !confirm(`Delete ${mailbox.address} and its ${mailbox.total} emails? Mail sent to it afterwards bounces.`)) return;
-    await api(`/mailboxes/${encodeURIComponent(mailbox.address)}`, { method: 'DELETE' });
-    props.onDeleted();
+    if (!mailbox || !confirm(`Delete ${mailbox.address} and its ${mailbox.total} emails? Mail sent to it afterwards is ignored.`)) return;
+    try {
+      await api(`/mailboxes/${encodeURIComponent(mailbox.address)}`, { method: 'DELETE' });
+      props.onDeleted();
+    } catch (e) {
+      alert(errorText(e));
+    }
   }
+
+  const count = threads?.length ?? 0;
 
   return (
     <section className="list">
       <div className="list-head">
         <div className="body">{mailbox.address}</div>
         <div className="meta quiet">
-          {mailbox.total} {mailbox.total === 1 ? 'message' : 'messages'}{mailbox.unread ? `, ${mailbox.unread} unread` : ''}
+          {count} {count === 1 ? 'conversation' : 'conversations'}{mailbox.unread ? `, ${mailbox.unread} unread` : ''}
         </div>
         <div className="row-actions meta">
           <button className="quiet" onClick={() => { copy(mailbox.address); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
@@ -291,20 +312,20 @@ function MessageList(props: {
         </div>
       </div>
 
-      {messages?.length === 0 && (
+      {threads?.length === 0 && (
         <p className="body quiet">Nothing yet. Mail sent to this address shows up here within a few seconds.</p>
       )}
-      {messages?.map((m) => {
-        const unread = m.direction === 'in' && !m.readAt;
-        return (
-          <button key={m.id} className={`msg${unread ? ' unread' : ''}${m.id === props.openId ? ' on' : ''}`} onClick={() => props.onOpen(m.id)}>
-            <span className="body one from">{m.direction === 'out' ? `To ${m.toAddress}` : m.fromName || m.fromAddress}</span>
-            <span className={`meta right${unread ? ' ink' : ''}`}>{shortTime(m.createdAt)}</span>
-            <span className="body one subj">{m.subject || '(no subject)'}</span>
-            <span className="meta right accent">{m.code ? formatCode(m.code) : m.link ? 'Link' : ''}</span>
-          </button>
-        );
-      })}
+      {threads?.map((t) => (
+        <button key={t.id} className={`msg${t.unread ? ' unread' : ''}${t.id === props.openId ? ' on' : ''}`} onClick={() => props.onOpen(t.id)}>
+          <span className="body one from">
+            {t.counterpartName || t.counterpart}
+            {t.count > 1 && <span className="meta quiet">&nbsp;&nbsp;{t.count}</span>}
+          </span>
+          <span className={`meta right${t.unread ? ' ink' : ''}`}>{shortTime(t.lastAt)}</span>
+          <span className="body one subj">{t.subject || '(no subject)'}</span>
+          <span className="meta right accent">{t.code ? formatCode(t.code) : t.link ? 'Link' : ''}</span>
+        </button>
+      ))}
 
       <div className="list-foot">
         <button className="meta quiet" onClick={remove}>Delete mailbox</button>

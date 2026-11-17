@@ -27,6 +27,8 @@ export interface Mailbox {
 export interface MessageSummary {
   id: string;
   mailboxId: string;
+  /** The conversation this email belongs to. */
+  threadId: string;
   direction: 'in' | 'out';
   fromName: string | null;
   fromAddress: string;
@@ -43,6 +45,32 @@ export interface MessageSummary {
 export interface Message extends MessageSummary {
   text: string | null;
   html: string | null;
+}
+
+export interface ThreadSummary {
+  id: string;
+  mailboxId: string;
+  /** Subject of the first email. */
+  subject: string;
+  /** The other person's address, and their name when they have written. */
+  counterpart: string;
+  counterpartName: string | null;
+  count: number;
+  unread: number;
+  lastAt: number;
+  lastDirection: 'in' | 'out';
+  snippet: string;
+  /** The newest verification code or link in the conversation. */
+  code: string | null;
+  link: string | null;
+}
+
+export interface Thread {
+  id: string;
+  mailboxId: string;
+  subject: string;
+  /** Oldest first. */
+  messages: Message[];
 }
 
 export interface PinInfo {

@@ -84,3 +84,30 @@ export function htmlToText(html: string): string {
 export function formatCode(code: string): string {
   return /^\d{6}$/.test(code) ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
 }
+
+// "On Tue, Nov 17, 2026 at 12:42 PM <thomas@beenex.company> wrote:", which Gmail may wrap over two lines.
+const QUOTE_STARTS = [
+  /\n[ \t]*On [^\n]{1,200}(\n[^\n]{1,200})?wrote:[ \t]*\n/,
+  /\n[ \t]*-{2,}\s*Original Message\s*-{2,}/i,
+  /\n[ \t]*From: [^\n]+\n[ \t]*(Sent|Date): /,
+];
+
+/** Splits a reply into what the person wrote and the earlier emails they quoted below it. */
+export function splitQuoted(text: string): { main: string; quoted: string } {
+  const t = `\n${text.replace(/\r\n/g, '\n')}`;
+  let at = -1;
+  for (const re of QUOTE_STARTS) {
+    const m = re.exec(t);
+    if (m && (at < 0 || m.index < at)) at = m.index;
+  }
+  if (at < 0) {
+    // A trailing block of "> " lines.
+    const lines = t.split('\n');
+    let i = lines.length;
+    while (i > 0 && (lines[i - 1].startsWith('>') || !lines[i - 1].trim())) i--;
+    if (i < lines.length && lines.slice(i).some((l) => l.startsWith('>'))) at = lines.slice(0, i).join('\n').length;
+  }
+  if (at < 0) return { main: text.trim(), quoted: '' };
+  const main = t.slice(0, at).trim();
+  return main ? { main, quoted: t.slice(at).trim() } : { main: text.trim(), quoted: '' };
+}

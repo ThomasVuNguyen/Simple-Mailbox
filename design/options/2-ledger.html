@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bmail · Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+/* Option 2: Ledger. After OpenCode Data and Paul Kalkbrenner.
+   One monospace family, 3 sizes. 4 colors. Hairline rules, never boxes. */
+:root {
+  --white: #FFFFFF;
+  --black: #111111;
+  --gray: #A0A0A0;
+  --accent: #1F3BFF;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--white); color: var(--black); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; cursor: pointer; }
+
+/* The only three type styles */
+.display { font: 400 30px/1.15 "IBM Plex Mono", monospace; letter-spacing: -0.03em; }
+.body    { font: 400 13px/1.55 "IBM Plex Mono", monospace; }
+.meta    { font: 400 10.5px/1.5 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.gray   { color: var(--gray); }
+.accent { color: var(--accent); }
+
+.top { display: flex; justify-content: space-between; align-items: baseline; padding: 20px 32px 14px; border-bottom: 1px solid var(--black); }
+.top nav { display: flex; gap: 28px; }
+
+.app { display: grid; grid-template-columns: 190px 560px minmax(0, 1fr); height: 760px; }
+.app > * { padding: 28px 32px; }
+
+/* Mailboxes */
+.group { margin-bottom: 32px; }
+.group .meta { margin-bottom: 8px; }
+.box { display: flex; justify-content: space-between; padding: 2px 0; color: var(--gray); }
+.box.on { color: var(--black); }
+.box.on span:first-child::before { content: "→ "; color: var(--accent); }
+
+/* Ledger */
+.ledger { padding-left: 0 !important; padding-right: 0 !important; }
+.ledger .head, .ledger .row { display: grid; grid-template-columns: 80px 120px minmax(0, 1fr) 72px; column-gap: 16px; padding: 0 32px; }
+.ledger .head { padding-bottom: 10px; border-bottom: 1px solid var(--black); }
+.ledger .row { padding-top: 11px; padding-bottom: 11px; border-bottom: 1px solid #A0A0A0; color: var(--gray); }
+.ledger .row.unread { color: var(--black); }
+.ledger .row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ledger .row.on .t::before { content: "→ "; color: var(--accent); }
+.ledger .code { text-align: right; }
+.ledger .head .code { text-align: right; }
+.count { padding: 0 32px 18px; }
+
+/* Reading */
+.fields { display: grid; grid-template-columns: 84px 1fr; row-gap: 3px; margin-bottom: 44px; }
+.subject { margin-bottom: 36px; }
+.codeline { padding: 14px 0; border-top: 1px solid var(--black); border-bottom: 1px solid var(--black); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 32px; }
+.text p { max-width: 54ch; margin-bottom: 12px; }
+.actions { display: flex; gap: 24px; margin-top: 36px; }
+
+/* Sign in */
+.signin { border-top: 1px solid var(--black); display: grid; grid-template-columns: 190px 1fr; padding: 100px 0 140px; }
+.signin > * { padding: 0 32px; }
+.pin { display: flex; gap: 14px; margin: 44px 0 20px; }
+.pin span { width: 40px; text-align: center; padding: 6px 0; border-bottom: 1px solid var(--black); }
+.pin span.next { border-bottom: 2px solid var(--accent); }
+.pin span.empty { border-bottom-color: var(--gray); }
+
+@media (max-width: 1000px) {
+  .app { grid-template-columns: 1fr; height: auto; }
+  .signin { grid-template-columns: 1fr; padding: 60px 0; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <span class="meta">bmail.beenex.company</span>
+  <nav class="meta"><a class="accent">+ New mailbox</a><a class="gray">Settings</a><a class="gray">Lock</a></nav>
+</header>
+
+<main class="app">
+  <nav id="boxes"></nav>
+
+  <section class="ledger">
+    <div class="count">
+      <div class="body">signups@beenex.company</div>
+      <div class="meta gray">8 messages / 3 unread</div>
+    </div>
+    <div class="head meta gray"><span>Time</span><span>From</span><span>Subject</span><span class="code">Code</span></div>
+    <div id="rows"></div>
+  </section>
+
+  <article>
+    <div class="fields meta">
+      <span class="gray">From</span><span>no-reply@linear.app</span>
+      <span class="gray">To</span><span>signups@beenex.company</span>
+      <span class="gray">Received</span><span>2026-11-17 10:42</span>
+      <span class="gray">Agent</span><span>Read at 10:43</span>
+    </div>
+    <h1 class="display subject">Your Linear login code</h1>
+    <div class="codeline">
+      <span class="display accent">482913</span>
+      <a class="meta gray">Copy</a>
+    </div>
+    <div class="text body">
+      <p>Enter this code to sign in to Linear. It expires in 10 minutes.</p>
+      <p>If you didn't try to sign in, you can ignore this email. Someone may have typed your address by mistake.</p>
+    </div>
+    <div class="actions meta"><a>Reply</a><a>Forward</a><a>Delete</a></div>
+  </article>
+</main>
+
+<section class="signin">
+  <span class="meta gray">Sign in</span>
+  <div>
+    <h2 class="display">Enter PIN</h2>
+    <div class="pin display">
+      <span>4</span><span>8</span><span>2</span><span class="next">&nbsp;</span><span class="empty">&nbsp;</span><span class="empty">&nbsp;</span>
+    </div>
+    <div class="meta gray">5 tries left / then locked 15 min</div>
+  </div>
+</section>
+
+<script>
+const boxes = [
+  { domain: "beenex.company", items: [["signups", 3, true], ["newsletters", 12], ["agent-7f3k", 1], ["figma-trial", 0]] },
+  { domain: "beenex.ai", items: [["hello", 0], ["receipts", 2]] },
+];
+const msgs = [
+  { from: "Linear", subj: "Your Linear login code", time: "10:42", code: "482913", unread: true, on: true },
+  { from: "Vercel", subj: "Verify your email address", time: "10:24", code: "771054", unread: true },
+  { from: "The Browser", subj: "Welcome. Here is your first issue", time: "09:15", unread: true },
+  { from: "Product Hunt", subj: "Confirm your account", time: "08:02", code: "LINK" },
+  { from: "Morning Brew", subj: "You're in. First issue lands tomorrow", time: "Nov 16" },
+  { from: "GitHub", subj: "Please verify your device", time: "Nov 16", code: "305118" },
+  { from: "Figma", subj: "Your trial ends in 3 days", time: "Nov 15" },
+  { from: "Read.cv", subj: "Confirm your email", time: "Nov 15", code: "LINK" },
+];
+document.getElementById("boxes").innerHTML = boxes.map(g => `
+  <div class="group">
+    <div class="meta gray">${g.domain}</div>
+    ${g.items.map(([n, c, on]) => `<a class="box body${on ? " on" : ""}"><span>${n}</span><span>${c || ""}</span></a>`).join("")}
+  </div>`).join("");
+document.getElementById("rows").innerHTML = msgs.map(m => `
+  <a class="row body${m.unread ? " unread" : ""}${m.on ? " on" : ""}">
+    <span class="t">${m.time}</span><span>${m.from}</span><span>${m.subj}</span><span class="code accent">${m.code || ""}</span>
+  </a>`).join("");
+</script>
+</body>
+</html>

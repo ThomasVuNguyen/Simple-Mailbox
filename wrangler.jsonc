@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "simple-mailbox",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "bmail.beenex.company", "custom_domain": true }],
+
+  // The React app is static assets. API calls always reach the Worker first.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Daily: drop expired sessions and stale sign-in failures.
+  "triggers": { "crons": ["17 4 * * *"] },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "simple-mailbox-db",
+      // Filled in by scripts/ensure-d1.mjs during deploy, which also creates the database if needed.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+  // Inbound mail: in Cloudflare, for each domain, Email > Email Routing > Catch-all address
+  // > Send to a Worker > simple-mailbox. Outbound mail goes through Resend.
+}

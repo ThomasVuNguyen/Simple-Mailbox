@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bmail · Editorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400&family=Libre+Franklin:wght@400&display=swap" rel="stylesheet">
+<style>
+/* Option 3: Editorial. After ProPublica and Stripe Press.
+   Serif for what you read, sans for everything else. 4 colors. 3 type styles.
+   Columns are marked by a rule on top, like a newspaper section, never boxed. */
+:root {
+  --paper: #FAFAF7;
+  --ink: #141414;
+  --quiet: #75716A;
+  --accent: #B8231A;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--paper); color: var(--ink); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; cursor: pointer; }
+
+/* The only three type styles */
+.display { font: 400 36px/1.1 "Newsreader", Georgia, serif; letter-spacing: -0.01em; }
+.body    { font: 400 14.5px/1.55 "Libre Franklin", sans-serif; }
+.meta    { font: 400 10.5px/1.5 "Libre Franklin", sans-serif; text-transform: uppercase; letter-spacing: 0.1em; }
+
+.quiet  { color: var(--quiet); }
+.accent { color: var(--accent); }
+
+.mast { display: flex; justify-content: space-between; align-items: baseline; padding: 28px 48px 0; }
+.mast nav { display: flex; gap: 28px; }
+
+.app { display: grid; grid-template-columns: 180px 340px minmax(0, 1fr); column-gap: 40px; padding: 28px 48px 48px; height: 760px; }
+.col { border-top: 2px solid var(--ink); padding-top: 14px; }
+.col > .meta:first-child { margin-bottom: 28px; }
+
+/* Mailboxes */
+.group { margin-bottom: 28px; }
+.group .meta { margin-bottom: 6px; }
+.box { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; color: var(--quiet); }
+.box.on { color: var(--ink); text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 5px; }
+
+/* List */
+.row { display: block; padding: 12px 0 13px; color: var(--quiet); }
+.row + .row { border-top: 1px solid var(--quiet); }
+.row.unread { color: var(--ink); }
+.row .line1 { display: flex; justify-content: space-between; margin-bottom: 3px; }
+.row .subj { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.on .subj { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 5px; }
+
+/* Reading */
+.read { max-width: 640px; }
+.byline { margin-bottom: 20px; }
+.subject { margin-bottom: 28px; }
+.code { display: flex; align-items: baseline; gap: 20px; padding-bottom: 28px; margin-bottom: 28px; border-bottom: 1px solid var(--quiet); }
+.text p { max-width: 58ch; margin-bottom: 14px; }
+.actions { display: flex; gap: 28px; margin-top: 32px; }
+
+/* Sign in */
+.signin { padding: 0 48px 140px; }
+.signin .col { display: grid; grid-template-columns: 220px 1fr; padding-top: 100px; border-top-width: 2px; }
+.pin { display: flex; gap: 18px; margin: 36px 0 22px; }
+.pin span { width: 34px; text-align: center; border-bottom: 1px solid var(--ink); padding-bottom: 4px; }
+.pin span.next { border-bottom: 2px solid var(--accent); }
+.pin span.empty { border-bottom-color: var(--quiet); }
+
+@media (max-width: 1000px) {
+  .app { grid-template-columns: 1fr; row-gap: 40px; height: auto; padding: 24px 20px; }
+  .mast, .signin { padding-left: 20px; padding-right: 20px; }
+  .signin .col { grid-template-columns: 1fr; padding-top: 60px; }
+}
+</style>
+</head>
+<body>
+
+<header class="mast">
+  <span class="meta">bmail</span>
+  <nav class="meta"><a class="accent">New mailbox</a><a class="quiet">Settings</a><a class="quiet">Lock</a></nav>
+</header>
+
+<main class="app">
+  <nav class="col">
+    <div class="meta">Mailboxes</div>
+    <div id="boxes"></div>
+  </nav>
+
+  <section class="col">
+    <div class="meta"><span>signups@beenex.company</span> <span class="quiet">&nbsp;3 unread</span></div>
+    <div id="rows"></div>
+  </section>
+
+  <article class="col read">
+    <div class="meta quiet byline">Today, 10:42</div>
+    <h1 class="display subject">Your Linear login code</h1>
+    <div class="code">
+      <span class="display accent">482 913</span>
+      <a class="meta quiet">Copy code</a>
+    </div>
+    <div class="byline meta"><span>From Linear</span> <span class="quiet">&nbsp;no-reply@linear.app&nbsp; to signups@beenex.company</span></div>
+    <div class="text body">
+      <p>Enter this code to sign in to Linear. It expires in 10 minutes.</p>
+      <p>If you didn't try to sign in, you can ignore this email. Someone may have typed your address by mistake.</p>
+    </div>
+    <div class="actions meta"><a>Reply</a><a>Forward</a><a>Delete</a><a class="quiet">Read by agent at 10:43</a></div>
+  </article>
+</main>
+
+<section class="signin">
+  <div class="col">
+    <span class="meta">bmail</span>
+    <div>
+      <h2 class="display">Enter your PIN</h2>
+      <div class="pin display">
+        <span>•</span><span>•</span><span>•</span><span class="next">&nbsp;</span><span class="empty">&nbsp;</span><span class="empty">&nbsp;</span>
+      </div>
+      <div class="meta quiet">5 tries left. Then sign in locks for 15 minutes.</div>
+    </div>
+  </div>
+</section>
+
+<script>
+const boxes = [
+  { domain: "beenex.company", items: [["signups", 3, true], ["newsletters", 12], ["agent-7f3k", 1], ["figma-trial", 0]] },
+  { domain: "beenex.ai", items: [["hello", 0], ["receipts", 2]] },
+];
+const msgs = [
+  { from: "Linear", subj: "Your Linear login code", time: "10:42", code: "482 913", unread: true, on: true },
+  { from: "Vercel", subj: "Verify your email address", time: "10:24", code: "771 054", unread: true },
+  { from: "The Browser", subj: "Welcome. Here is your first issue", time: "09:15", unread: true },
+  { from: "Product Hunt", subj: "Confirm your account", time: "08:02", code: "Link" },
+  { from: "Morning Brew", subj: "You're in. First issue lands tomorrow", time: "Yesterday" },
+  { from: "GitHub", subj: "Please verify your device", time: "Yesterday", code: "305 118" },
+  { from: "Figma", subj: "Your trial ends in 3 days", time: "Mon" },
+];
+document.getElementById("boxes").innerHTML = boxes.map(g => `
+  <div class="group">
+    <div class="meta quiet">${g.domain}</div>
+    ${g.items.map(([n, c, on]) => `<a class="box body${on ? " on" : ""}"><span>${n}</span><span class="meta">${c || ""}</span></a>`).join("")}
+  </div>`).join("");
+document.getElementById("rows").innerHTML = msgs.map(m => `
+  <a class="row${m.unread ? " unread" : ""}${m.on ? " on" : ""}">
+    <span class="line1 meta"><span>${m.from}&nbsp;&nbsp;<span class="accent">${m.code || ""}</span></span><span class="quiet">${m.time}</span></span>
+    <span class="subj body">${m.subj}</span>
+  </a>`).join("");
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# Encrypts the Resend key and keys PIN hashes. Make one with: openssl rand -base64 48
+APP_SECRET=
+
+# Local testing only. Leave unset to talk to api.resend.com.
+# RESEND_API_BASE=http://127.0.0.1:8799

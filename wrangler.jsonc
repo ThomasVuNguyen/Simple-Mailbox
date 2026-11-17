@@ -20,8 +20,8 @@
     {
       "binding": "DB",
       "database_name": "simple-mailbox-db",
-      // Filled in by scripts/ensure-d1.mjs during deploy, which also creates the database if needed.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // scripts/ensure-d1.mjs checks this during deploy and creates the database if it is missing.
+      "database_id": "7dd1eaa8-781d-421f-a784-9c56f7c35c9f",
       "migrations_dir": "migrations"
     }
   ]

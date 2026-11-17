@@ -12,7 +12,7 @@ bmail: throwaway mailboxes on your own domains, built so an AI agent can use the
 - **More PINs:** make one PIN per agent or device in Settings, each with a name. Each email shows which PIN read it first ("Read by Claude at 10:43"). Removing a PIN signs out everything that used it.
 - **Mailboxes:** add and delete mailboxes on any of your domains, with a chosen name or a random one. Each mailbox keeps the email it sends and receives. `name+anything@domain` arrives in `name@domain`.
 - **Codes:** bmail finds the verification code or link in each email and shows it first.
-- **Stack:** Cloudflare only for hosting and storage (Workers, D1, Email Routing). Resend sends the mail.
+- **Stack:** Cloudflare only for hosting and storage (Workers, D1). Resend sends and receives the mail.
 - **Domain:** `bmail.beenex.company`.
 
 ## How it works
@@ -21,8 +21,8 @@ bmail: throwaway mailboxes on your own domains, built so an AI agent can use the
 |---|---|
 | Cloudflare Worker (Hono) | The API, and it serves the React app. |
 | D1 | PINs (hashed), sessions, mailboxes, emails, the Resend key (encrypted). |
-| Cloudflare Email Routing | Each domain's catch-all sends incoming mail to the Worker's `email()` handler. Mail to an address with no mailbox bounces. |
-| Resend | Lists your domains and sends outgoing mail. |
+| Resend | Lists your domains, sends mail, and receives it (Resend Inbound). bmail registers its own `email.received` webhook when the API key is saved, checks each webhook's signature, then fetches the full email from Resend. Mail for addresses without a mailbox is ignored. |
+| Cloudflare Email Routing (optional) | For a domain whose mail goes to Cloudflare instead of Resend: route its catch-all to the Worker's `email()` handler. |
 
 Secrets in D1 are protected by `APP_SECRET`, a Worker secret that is never stored in the database. The Resend key is encrypted with AES-256-GCM, and PINs are hashed with HMAC-SHA-256, both under keys derived from `APP_SECRET`. A copy of the database alone reveals neither.
 
@@ -59,7 +59,7 @@ The workflow uses three repo secrets:
 - `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`: the same Cloudflare token ChimpMail deploys with ("Edit Cloudflare Workers" template plus Account > D1 > Edit).
 - `APP_SECRET`: a random value, made once with `openssl rand -base64 48 | gh secret set APP_SECRET`. Never change it.
 
-Receiving mail: for each domain, in the Cloudflare dashboard, go to Email > Email Routing and set **Catch-all address** to **Send to a Worker > simple-mailbox**. The domain's DNS must be on Cloudflare. Enabling Email Routing replaces the domain's MX records, so use a domain or subdomain that doesn't already receive mail somewhere else.
+Receiving mail: turn on receiving for the domain in Resend (Domains). Saving the API key in bmail connects its webhook and imports recent mail for existing mailboxes; Settings shows whether receiving is connected. Alternatively, for a domain on Cloudflare Email Routing, set **Catch-all address** to **Send to a Worker > simple-mailbox**.
 
 The first visitor to a fresh deploy makes the first PIN, so open it right after the first deploy.
 

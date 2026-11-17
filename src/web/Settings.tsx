@@ -61,10 +61,13 @@ export function Settings({ pinLabel, onKeySaved, onDomains }: {
   const [replacing, setReplacing] = useState(false);
   const [domains, setDomains] = useState<Domain[] | null>(null);
   const [pins, setPins] = useState<PinInfo[]>([]);
+  const [receiving, setReceiving] = useState<{ endpoint: string } | null>(null);
+  const [connect, setConnect] = useState<{ busy: boolean; note: string; error: boolean }>({ busy: false, note: '', error: false });
 
   const load = useCallback(async () => {
-    const s = await api<{ resendKey: string | null }>('/settings');
+    const s = await api<{ resendKey: string | null; receiving: { endpoint: string } | null }>('/settings');
     setResendKey(s.resendKey);
+    setReceiving(s.receiving);
     setPins(await api<PinInfo[]>('/pins'));
     if (s.resendKey) api<Domain[]>('/domains').then(setDomains).catch(() => setDomains([]));
   }, []);
@@ -96,10 +99,36 @@ export function Settings({ pinLabel, onKeySaved, onDomains }: {
               </div>
             ))}
             <p className="body quiet" style={{ marginTop: 20, maxWidth: '60ch' }}>
-              To receive mail, route each domain to bmail in Cloudflare: Email, Email Routing, Routing rules, Catch-all address, Send to a Worker, simple-mailbox.
+              Mail arrives through Resend. A domain receives once receiving is turned on for it in Resend, under Domains.
             </p>
           </div>
         )}
+        {resendKey && !replacing && (
+          <div className="row-actions" style={{ marginTop: 28, alignItems: 'baseline' }}>
+            <span className={`meta ${receiving ? 'ink' : 'accent'}`}>{receiving ? 'Receiving connected' : 'Receiving not connected'}</span>
+            <button
+              className="meta quiet"
+              disabled={connect.busy}
+              onClick={async () => {
+                setConnect({ busy: true, note: '', error: false });
+                try {
+                  const r = await api<{ connected: boolean; imported: number; error?: string }>('/settings/receiving', { method: 'POST' });
+                  setConnect({
+                    busy: false,
+                    error: !r.connected,
+                    note: r.connected ? `Checked. ${r.imported} new ${r.imported === 1 ? 'email' : 'emails'} imported.` : r.error ?? 'Could not connect.',
+                  });
+                  load();
+                } catch (e) {
+                  setConnect({ busy: false, note: errorText(e), error: true });
+                }
+              }}
+            >
+              {connect.busy ? 'Checking' : receiving ? 'Check again' : 'Connect'}
+            </button>
+          </div>
+        )}
+        {connect.note && <p className={`meta err ${connect.error ? 'accent' : 'quiet'}`}>{connect.note}</p>}
       </div>
 
       <Pins pins={pins} onChange={load} />

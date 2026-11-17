@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatCode } from '../shared/extract';
 import type { AppState, Domain, Mailbox, MessageSummary } from '../shared/types';
 import { api, copy, errorText } from './api';
@@ -36,6 +36,21 @@ export function Mailroom({ state, onStateChange }: { state: AppState; onStateCha
     loadMailboxes().catch(() => {});
     if (state.hasResendKey) api<Domain[]>('/domains').then(setDomains).catch(() => setDomains([]));
   }, [loadMailboxes, state.hasResendKey]);
+
+  // A Resend key without receiving connected: connect it now, which also imports mail that already arrived.
+  const connecting = useRef(false);
+  useEffect(() => {
+    if (!state.hasResendKey || state.receiving || connecting.current) return;
+    connecting.current = true;
+    api<{ connected: boolean }>('/settings/receiving', { method: 'POST' })
+      .then((r) => {
+        if (!r.connected) return;
+        loadMailboxes().catch(() => {});
+        if (address) loadMessages(address).catch(() => {});
+        onStateChange();
+      })
+      .catch(() => {});
+  }, [state.hasResendKey, state.receiving, loadMailboxes, loadMessages, address, onStateChange]);
 
   // The open mailbox lives in the URL hash, so a reload or a shared link opens it again.
   useEffect(() => {

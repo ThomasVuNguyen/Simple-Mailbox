@@ -65,3 +65,61 @@ export async function sendEmail(resend: ResendTarget, mail: Outgoing): Promise<{
     }),
   });
 }
+
+// ---------- receiving (Resend Inbound) ----------
+
+export interface ReceivedSummary {
+  id: string;
+  from: string;
+  to: string[];
+  cc?: string[] | null;
+  received_for?: string[] | null;
+  subject: string | null;
+  message_id: string | null;
+  created_at: string;
+}
+
+export interface ReceivedEmail extends ReceivedSummary {
+  html: string | null;
+  text: string | null;
+  headers?: Record<string, string> | null;
+}
+
+export const getReceivedEmail = (resend: ResendTarget, id: string) =>
+  call<ReceivedEmail>(resend, `/emails/receiving/${encodeURIComponent(id)}`);
+
+export const listReceivedEmails = (resend: ResendTarget, limit = 100) =>
+  call<{ data: ReceivedSummary[] }>(resend, `/emails/receiving?limit=${limit}`);
+
+interface Webhook { id: string; endpoint: string; events: string[]; status?: string; signing_secret?: string }
+
+const WEBHOOK_SETTING = 'resend_webhook';
+
+export interface StoredWebhook { id: string; endpoint: string; secret: string }
+
+export async function getStoredWebhook(env: Env): Promise<StoredWebhook | null> {
+  const row = await env.DB.prepare('SELECT value FROM settings WHERE key = ?').bind(WEBHOOK_SETTING).first<{ value: string }>();
+  const plain = row ? await unseal(env.APP_SECRET, WEBHOOK_SETTING, row.value) : null;
+  return plain ? (JSON.parse(plain) as StoredWebhook) : null;
+}
+
+/**
+ * Makes sure Resend sends "email.received" to this app. Reuses bmail's own webhook if it exists,
+ * creates it otherwise, and stores its signing secret encrypted. Other webhooks in the account are left alone.
+ */
+export async function connectReceiving(env: Env, origin: string): Promise<StoredWebhook> {
+  if (!origin.startsWith('https://')) throw new HTTPException(400, { message: 'Receiving through Resend needs the app on https.' });
+  const resend = await requireResend(env);
+  const endpoint = `${origin}/api/webhooks/resend`;
+  const { data } = await call<{ data: Webhook[] }>(resend, '/webhooks');
+  let hook: Webhook | undefined = data.find((w) => w.endpoint === endpoint && w.events.includes('email.received'));
+  if (!hook) {
+    hook = await call<Webhook>(resend, '/webhooks', { method: 'POST', body: JSON.stringify({ endpoint, events: ['email.received'] }) });
+  }
+  if (!hook.signing_secret) hook = await call<Webhook>(resend, `/webhooks/${encodeURIComponent(hook.id)}`);
+  if (!hook.signing_secret) throw new HTTPException(502, { message: 'Resend did not return the webhook signing secret.' });
+  const stored: StoredWebhook = { id: hook.id, endpoint, secret: hook.signing_secret };
+  await env.DB.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .bind(WEBHOOK_SETTING, await seal(env.APP_SECRET, WEBHOOK_SETTING, JSON.stringify(stored))).run();
+  return stored;
+}

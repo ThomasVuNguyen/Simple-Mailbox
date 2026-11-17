@@ -3,6 +3,8 @@ export interface AppState {
   setup: boolean;
   signedIn: boolean;
   hasResendKey: boolean;
+  /** Resend sends received mail to this app's webhook. */
+  receiving: boolean;
   /** Label of the PIN this session signed in with. */
   pinLabel: string | null;
 }

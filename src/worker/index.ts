@@ -5,8 +5,11 @@ import {
   MAX_PINS, checkPin, clientIp, endSession, hashPin, identify, randomPin, requirePin, startSession,
 } from './auth';
 import type { AppEnv, Env } from './env';
-import { receiveEmail } from './inbound';
-import { getResendKey, listDomains, requireResend, saveResendKey, sendEmail } from './resend';
+import { backfillFromResend, receiveEmail, receiveFromResend } from './inbound';
+import {
+  connectReceiving, getResendKey, getStoredWebhook, listDomains, requireResend, saveResendKey, sendEmail,
+} from './resend';
+import { verifyWebhook } from './webhook';
 
 const app = new Hono<AppEnv>();
 
@@ -37,6 +40,7 @@ app.get('/api/state', async (c) => {
     setup: !hasPins,
     signedIn,
     hasResendKey: signedIn ? !!(await getResendKey(c.env)) : false,
+    receiving: signedIn ? !!(await getStoredWebhook(c.env)) : false,
     pinLabel: signedIn ? (who as { label: string }).label : null,
   } satisfies AppState);
 });
@@ -63,6 +67,23 @@ app.post('/api/auth/pin', async (c) => {
   return c.json({ token, label: who.label });
 });
 
+/** Resend calls this when an email arrives. Signed with the webhook's secret; anything unsigned is refused. */
+app.post('/api/webhooks/resend', async (c) => {
+  const body = await c.req.text();
+  const hook = await getStoredWebhook(c.env);
+  if (!hook) return c.json({ error: 'Receiving is not connected.' }, 409);
+  const ok = await verifyWebhook(hook.secret, {
+    id: c.req.header('svix-id'), timestamp: c.req.header('svix-timestamp'), signature: c.req.header('svix-signature'),
+  }, body);
+  if (!ok) return c.json({ error: 'Bad signature.' }, 401);
+  const event = JSON.parse(body) as { type?: string; data?: { email_id?: string; to?: string[]; cc?: string[]; received_for?: string[] } };
+  if (event.type !== 'email.received' || !event.data?.email_id) return c.json({ ignored: true });
+  const stored = await receiveFromResend(c.env, await requireResend(c.env), {
+    id: event.data.email_id, to: event.data.to ?? [], cc: event.data.cc, received_for: event.data.received_for,
+  });
+  return c.json({ stored });
+});
+
 app.post('/api/auth/logout', async (c) => {
   await endSession(c);
   return c.json({ ok: true });
@@ -77,8 +98,21 @@ api.use('*', requirePin);
 
 api.get('/settings', async (c) => {
   const key = await getResendKey(c.env);
-  return c.json({ resendKey: key ? `${key.slice(0, 3)}...${key.slice(-4)}` : null });
+  const hook = await getStoredWebhook(c.env);
+  return c.json({ resendKey: key ? `${key.slice(0, 3)}...${key.slice(-4)}` : null, receiving: hook ? { endpoint: hook.endpoint } : null });
 });
+
+/** Connects Resend receiving (finds or creates bmail's webhook) and imports mail that already arrived. */
+async function connectAndBackfill(c: Context<AppEnv>) {
+  try {
+    await connectReceiving(c.env, new URL(c.req.url).origin);
+    return { connected: true, imported: await backfillFromResend(c.env, await requireResend(c.env)) };
+  } catch (e) {
+    return { connected: false, imported: 0, error: e instanceof Error ? e.message : 'Could not connect receiving.' };
+  }
+}
+
+api.post('/settings/receiving', async (c) => c.json(await connectAndBackfill(c)));
 
 api.put('/settings/resend', async (c) => {
   const { key } = await json<{ key?: string }>(c);
@@ -86,7 +120,7 @@ api.put('/settings/resend', async (c) => {
   if (!/^re_[A-Za-z0-9_]{8,}$/.test(k)) throw bad('A Resend API key starts with "re_".');
   const domains = await listDomains({ key: k, base: c.env.RESEND_API_BASE }); // proves the key works and can list domains
   await saveResendKey(c.env, k);
-  return c.json({ ok: true, domains });
+  return c.json({ ok: true, domains, receiving: await connectAndBackfill(c) });
 });
 
 api.get('/domains', async (c) => c.json(await listDomains(await requireResend(c.env))));
